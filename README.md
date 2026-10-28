@@ -88,14 +88,20 @@ docs/排查记录.md           踩坑记录（含两个真实根因）
 .\tools\unlock-manage.ps1 -Enable
 ```
 
-脚本会把解锁项排到固件启动顺序第一位，并保存原始顺序。
-每次开机会先执行解锁，然后自动进入 Windows。
+> **注意实现方式**：不能只把解锁项排到固件启动顺序第一位。实测发现
+> **Windows Boot Manager 每次启动都会把固件顺序改回自己第一**，改动一次就会被覆盖。
+>
+> 正确做法是注册计划任务 `GPUUnlock-ArmNextBoot`，在每次登录时用
+> `bcdedit /set {fwbootmgr} bootsequence <解锁项>` **武装下一次启动**（一次性）。
+> 下次开机会先进解锁，再链式启动 Windows，登录后又自动武装，形成闭环。
 
 ### 恢复默认
 
 ```powershell
 .\tools\unlock-manage.ps1 -Disable
 ```
+
+会删除计划任务、清除 `bootsequence`、并把固件启动顺序还原成备份值。
 
 ### 只执行一次
 

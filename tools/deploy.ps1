@@ -111,13 +111,18 @@ if ($entryId) {
 # 5. 自动执行
 Write-Host "`n[5/5] 开机自动执行"
 if ($entryId) {
-  $txt = Bcd @('/enum', '{fwbootmgr}')
-  $first = ([regex]::Match($txt, '(?m)^\s*(?:displayorder|显示顺序)\s+(\{[^}]+\})')).Groups[1].Value
-  if ($first -eq $entryId) {
-    Ok '已启用（解锁项在固件启动顺序第一位）'
+  $task = Get-ScheduledTask -TaskName 'GPUUnlock-ArmNextBoot' -ErrorAction SilentlyContinue
+  $txt  = Bcd @('/enum', '{fwbootmgr}')
+  $bs   = [regex]::Match($txt, '(?mi)^\s*bootsequence\s+(\{[0-9a-fA-F-]{36}\})')
+  $armed = $bs.Success -and $bs.Groups[1].Value -eq $entryId
+  if ($task -and $armed) {
+    Ok '已启用（登录时武装下一次开机，当前已武装）'
+  } elseif ($task) {
+    if ($Check) { Bad '武装任务存在但下次启动目标未设置' }
+    else { & (Join-Path $PSScriptRoot 'arm-boot.ps1'); Ok '已重新武装下一次开机' }
   } else {
     if ($Check) {
-      Bad '未启用自动执行'
+      Bad '未启用自动执行（缺少 GPUUnlock-ArmNextBoot 任务）'
     } else {
       & (Join-Path $PSScriptRoot 'unlock-manage.ps1') -Enable | Out-Null
       Ok '已启用自动执行'

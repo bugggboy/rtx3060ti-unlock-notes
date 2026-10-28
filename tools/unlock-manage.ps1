@@ -90,12 +90,16 @@ function ShowStatus($entryId, $order) {
     if ($path -ne $efiPath) { Write-Host '  警告: 路径与预期不一致' -ForegroundColor Yellow }
   }
   Write-Host ("固件启动顺序: " + ($order -join ' '))
-  $first = if ($order.Count -gt 0) { $order[0] } else { '' }
-  if ($entryId -and $first -eq $entryId) {
-    Write-Host '模式: 自动（每次开机都会先执行解锁）' -ForegroundColor Green
+  $taskMode = Get-ScheduledTask -TaskName 'GPUUnlock-ArmNextBoot' -ErrorAction SilentlyContinue
+  if ($entryId -and $taskMode) {
+    Write-Host '模式: 自动（每次登录武装下一次开机，开机先解锁）' -ForegroundColor Green
   } else {
     Write-Host '模式: 手动（开机按 F11 选择执行）' -ForegroundColor Yellow
   }
+  $fwtxt = Bcd @('/enum', '{fwbootmgr}')
+  $bs = [regex]::Match($fwtxt, '(?mi)^\s*bootsequence\s+(\{[0-9a-fA-F-]{36}\})')
+  if ($bs.Success) { Write-Host ("下次启动目标: " + $bs.Groups[1].Value + "（一次性）") } else { Write-Host '下次启动目标: 未武装' }
+
   $s = LoadState
   if ($s -and $s.OriginalOrder) {
     Write-Host ("已保存的原始顺序: " + ($s.OriginalOrder -join ' '))
@@ -123,27 +127,37 @@ if ($Run) {
 }
 
 if ($Enable) {
+  # Windows 每次启动都会把固件顺序改回自己第一，所以不能只改 displayorder，
+  # 必须注册一个登录时执行的任务，在 Windows 内重新武装下一次启动。
   $state = LoadState
   if (-not $state -or -not $state.OriginalOrder) {
     SaveState ([ordered]@{ EntryId = $entryId; OriginalOrder = $order; SavedUtc = (Get-Date).ToUniversalTime().ToString('o') })
     $state = LoadState
   }
-  $base = @($state.OriginalOrder) | Where-Object { $_ -ne $entryId }
-  $new  = @($entryId) + $base
-  [void](Bcd (@('/set', '{fwbootmgr}', 'displayorder') + $new))
-  $after = FirmwareOrder
-  if ($after.Count -eq 0 -or $after[0] -ne $entryId) { throw '写入后校验失败，启动顺序未生效。' }
-  Write-Host '已启用自动模式：每次开机会先执行解锁，然后自动进入 Windows。' -ForegroundColor Green
+  $armScript = Join-Path $PSScriptRoot 'arm-boot.ps1'
+  if (-not (Test-Path -LiteralPath $armScript)) { throw ('缺少 ' + $armScript) }
+  $act = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $armScript + '"')
+  $trg = New-ScheduledTaskTrigger -AtLogOn
+  $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
+  $prn = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+  Register-ScheduledTask -TaskName 'GPUUnlock-ArmNextBoot' -Action $act -Trigger $trg -Settings $set -Principal $prn -Description '每次登录时把解锁项设为下一次启动目标' -Force | Out-Null
+  & $armScript
+  Write-Host '已启用自动模式：每次登录会武装下一次开机，开机时先解锁再进 Windows。' -ForegroundColor Green
   Write-Host '如需取消，运行：.\unlock-manage.ps1 -Disable' -ForegroundColor Gray
   exit 0
 }
 
 if ($Disable) {
+  $t = Get-ScheduledTask -TaskName 'GPUUnlock-ArmNextBoot' -ErrorAction SilentlyContinue
+  if ($t) { Unregister-ScheduledTask -TaskName 'GPUUnlock-ArmNextBoot' -Confirm:$false; Write-Host '已删除自动武装任务。' }
+  try { [void](Bcd @('/deletevalue', '{fwbootmgr}', 'bootsequence')); Write-Host '已清除下次启动目标。' } catch { }
   $state = LoadState
-  if (-not $state -or -not $state.OriginalOrder) { throw '没有找到保存的原始顺序，无法自动恢复。可用 -Status 查看当前顺序。' }
-  [void](Bcd (@('/set', '{fwbootmgr}', 'displayorder') + @($state.OriginalOrder)))
-  $after = FirmwareOrder
-  if (($after -join ',') -ne (@($state.OriginalOrder) -join ',')) { throw '恢复后校验失败。' }
+  if ($state -and $state.OriginalOrder) {
+    [void](Bcd (@('/set', '{fwbootmgr}', 'displayorder') + @($state.OriginalOrder)))
+    Write-Host '已恢复原始固件启动顺序。'
+  } else {
+    Write-Host '没有保存的原始顺序，displayorder 未改动。' -ForegroundColor Yellow
+  }
   Write-Host '已恢复默认：开机直接进入 Windows。' -ForegroundColor Green
   exit 0
 }
