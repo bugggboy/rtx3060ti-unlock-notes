@@ -1,0 +1,22 @@
+# 绝不提交：NVIDIA 固件 / VBIOS / 驱动
+*.bin
+*.BIN
+PROM.BIN
+assets/
+gpu-unlock-src/
+winunlock-src/
+
+# 本地 profile（含本机 VBIOS 哈希，按上游要求不入库）
+profile-local.h
+local-config.json
+
+# 采集与证据（体积大且含本机数据）
+evidence/
+capture*/
+state/
+
+# 系统
+Thumbs.db
+desktop.ini
+__pycache__/
+*.pyc
