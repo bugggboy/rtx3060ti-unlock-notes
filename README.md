@@ -53,6 +53,7 @@
 ## 目录
 
 ```
+tools/deploy.ps1          一键部署：卷/EFI/资产/启动项/自动执行 全链路检查与修复
 tools/unlock-manage.ps1   启动项管理：查看 / 启用自动 / 关闭 / 单次执行
 tools/fw_boot_entry.py    直接用固件 NVRAM 变量创建 Boot#### 启动项（备用路径）
 tools/gucold.c            只读冷状态探针，用于确认能否读到显卡寄存器
@@ -64,11 +65,21 @@ docs/排查记录.md           踩坑记录（含两个真实根因）
 
 ## 使用
 
-### 查看状态
+> 全部命令需在**管理员 PowerShell**中执行。
+
+### 一条命令完成部署 / 修复
 
 ```powershell
-# 管理员 PowerShell
-.\tools\unlock-manage.ps1 -Status
+.\tools\deploy.ps1
+```
+
+它会依次检查并补齐：内部卷可访问 → 两个 EFI 存在 → 5 个固件资产哈希正确 →
+固件启动项存在（缺失则自动用 `{bootmgr}` 副本重建）→ 已设为开机自动执行。
+
+只想看状态、不改动任何东西：
+
+```powershell
+.\tools\deploy.ps1 -Check
 ```
 
 ### 开机自动执行（不用再按 F11）
