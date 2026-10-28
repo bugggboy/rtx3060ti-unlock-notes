@@ -57,6 +57,8 @@ tools/deploy.ps1          一键部署：卷/EFI/资产/启动项/自动执行 �
 tools/unlock-manage.ps1   启动项管理：查看 / 启用自动 / 关闭 / 单次执行
 tools/fw_boot_entry.py    直接用固件 NVRAM 变量创建 Boot#### 启动项（备用路径）
 tools/gucold.c            只读冷状态探针，用于确认能否读到显卡寄存器
+tools/push-via-api.py     git 协议被阻断时，改用 Git Data API 推送
+docs/实战复盘.md           完整技术长文（原理→流程→踩坑→收益边界）
 docs/实测结果.md           完整实测数据与部署结构
 docs/排查记录.md           踩坑记录（含两个真实根因）
 ```
